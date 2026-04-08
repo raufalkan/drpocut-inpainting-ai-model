@@ -1,59 +1,63 @@
 import os
-import torch
-from cog import BasePredictor, Input, Path
+import tempfile
+import subprocess
+from pathlib import Path
+from cog import BasePredictor, Input, Path as CogPath
+
 
 class Predictor(BasePredictor):
     def setup(self):
-        print("DiffuEraser yükleniyor...")
-        from diffueraser.diffueraser import DiffuEraser
-        from propainter.inference import get_device
+        """Model ağırlıklarını önceden indir (cold start optimizasyonu)"""
+        os.makedirs("weights", exist_ok=True)
 
-        self.device = get_device()
-        self.model = DiffuEraser(
-            self.device,
-            "/src/weights/stable-diffusion-v1-5",
-            "/src/weights/sd-vae-ft-mse",
-            "/src/weights/diffuEraser",
-            ckpt="2-Step"
-        )
-        print("Hazır!")
+        weights = {
+            "ProPainter.pth": "https://github.com/sczhou/ProPainter/releases/download/v0.1.0/ProPainter.pth",
+            "recurrent_flow_completion.pth": "https://github.com/sczhou/ProPainter/releases/download/v0.1.0/recurrent_flow_completion.pth",
+            "raft-things.pth": "https://github.com/sczhou/ProPainter/releases/download/v0.1.0/raft-things.pth",
+        }
+
+        for filename, url in weights.items():
+            dest = f"weights/{filename}"
+            if not os.path.exists(dest):
+                print(f"İndiriliyor: {filename}")
+                subprocess.run(["wget", "-q", "-O", dest, url], check=True)
+            else:
+                print(f"Zaten var: {filename}")
 
     def predict(
         self,
-        video: Path = Input(description="Orijinal video (mp4)"),
-        mask: Path = Input(description="Mask video - beyaz=silinecek alan (mp4)"),
-        video_length: int = Input(description="Max video uzunluğu (saniye)", default=60),
-        max_img_size: int = Input(description="Max genişlik/yükseklik", default=960),
-        mask_dilation_iter: int = Input(description="Mask genişleme miktarı", default=8),
-    ) -> Path:
+        video: CogPath = Input(description="Maskelenecek video (.mp4)"),
+        mask: CogPath = Input(description="Maske görüntüsü veya klasörü (.png)"),
+        width: int = Input(description="Çıktı genişliği", default=640),
+        height: int = Input(description="Çıktı yüksekliği", default=360),
+        fp16: bool = Input(description="Yarı hassasiyet (daha hızlı, daha az VRAM)", default=True),
+        neighbor_length: int = Input(description="Lokal komşu uzunluğu (azalt = daha az VRAM)", default=10),
+        subvideo_length: int = Input(description="Alt video uzunluğu", default=80),
+    ) -> CogPath:
+        """Video inpainting çalıştır"""
 
-        os.makedirs("/tmp/results", exist_ok=True)
-        output_path = "/tmp/results/output.mp4"
-        priori_path = "/tmp/results/priori.mp4"
+        output_dir = tempfile.mkdtemp()
 
-        from propainter.inference import Propainter
-        propainter = Propainter("/src/weights/propainter", device=self.device)
+        cmd = [
+            "python", "inference_propainter.py",
+            "--video", str(video),
+            "--mask", str(mask),
+            "--output", output_dir,
+            "--width", str(width),
+            "--height", str(height),
+            "--neighbor_length", str(neighbor_length),
+            "--subvideo_length", str(subvideo_length),
+        ]
 
-        propainter.forward(
-            str(video),
-            str(mask),
-            priori_path,
-            video_length=video_length,
-            ref_stride=10,
-            neighbor_length=10,
-            subvideo_length=50,
-            mask_dilation=mask_dilation_iter
-        )
+        if fp16:
+            cmd.append("--fp16")
 
-        self.model.forward(
-            str(video),
-            str(mask),
-            priori_path,
-            output_path,
-            max_img_size=max_img_size,
-            video_length=video_length,
-            mask_dilation_iter=mask_dilation_iter,
-            guidance_scale=None
-        )
+        print("Çalıştırılıyor:", " ".join(cmd))
+        subprocess.run(cmd, check=True)
 
-        return Path(output_path)
+        # Çıktı videosunu bul
+        output_files = list(Path(output_dir).rglob("*.mp4"))
+        if not output_files:
+            raise RuntimeError(f"Çıktı bulunamadı! {output_dir} klasörü: {os.listdir(output_dir)}")
+
+        return CogPath(output_files[0])
