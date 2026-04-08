@@ -29,7 +29,7 @@ def main():
     priori_path = os.path.join(args.save_path, "priori.mp4")                        
     output_path = os.path.join(args.save_path, "diffueraser_result.mp4") 
     
-    ## model initialization
+    ## model initializationss
     device = get_device()
     # PCM params
     ckpt = "2-Step"
