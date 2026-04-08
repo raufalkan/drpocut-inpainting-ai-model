@@ -1,0 +1,23 @@
+name: Push to Replicate
+
+on:
+  workflow_dispatch:         # Manuel tetikleme (Actions sekmesinden butona bas)
+  push:
+    branches: [main]         # main'e push edince otomatik çalışır (istersen kaldır)
+
+jobs:
+  push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Free disk space
+        uses: jlumbroso/free-disk-space@main   # büyük modeller için alan açar
+
+      - name: Setup Cog
+        uses: replicate/setup-cog@v2
+        with:
+          token: ${{ secrets.REPLICATE_CLI_AUTH_TOKEN }}
+
+      - name: Push to Replicate
+        run: cog push r8.im/rauf-alkan/dropcut-inpainting
