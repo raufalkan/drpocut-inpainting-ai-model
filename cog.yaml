@@ -20,5 +20,6 @@ build:
     - "tqdm"
     - "scikit-image"
     - "matplotlib"
+    - "av"
 
 predict: "predict.py:Predictor"
