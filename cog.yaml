@@ -21,5 +21,10 @@ build:
     - "scikit-image"
     - "matplotlib"
     - "av"
+  run:
+    - "mkdir -p weights/propainter"
+    - "curl -L --retry 3 -o weights/propainter/raft-things.pth https://github.com/sczhou/ProPainter/releases/download/v0.1.0/raft-things.pth"
+    - "curl -L --retry 3 -o weights/propainter/recurrent_flow_completion.pth https://github.com/sczhou/ProPainter/releases/download/v0.1.0/recurrent_flow_completion.pth"
+    - "curl -L --retry 3 -o weights/propainter/ProPainter.pth https://github.com/sczhou/ProPainter/releases/download/v0.1.0/ProPainter.pth"
 
 predict: "predict.py:Predictor"
